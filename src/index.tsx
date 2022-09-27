@@ -1,6 +1,6 @@
-import React, { SyntheticEvent } from "react";
+import React from "react";
 import ReactDOM from "react-dom/client";
-import { createContext, useContext, useState } from "react";
+import { useContext, useState } from "react";
 import "./index.css";
 interface Props {
   children?: any;
@@ -16,18 +16,15 @@ function TreeGridCell(props: Props) {
     </td>
   );
 }
-let emptyContext : {
-  handleKeyDown: any,
-  clickHandler: any,
-  expanded: any,
-  hidden: any
-} = {handleKeyDown: null,clickHandler:null,expanded: null,hidden:null};
+let emptyContext: {
+  handleKeyDown: any;
+  clickHandler: any;
+} = { handleKeyDown: null, clickHandler: null };
+
 const context = React.createContext(emptyContext);
+
 function TreeGridItem(props: Props) {
-  const { handleKeyDown, clickHandler, expanded, hidden } = useContext(context);
-  const id = props.id;
-  const isHidden = id !== undefined? (hidden[id] ? "hidden" : "") : "";
-  const isExpanded = id !== undefined? (expanded[id] ? expanded[id] : false) : false;
+  const { handleKeyDown, clickHandler} = useContext(context);
   return (
     <tr
       tabIndex={0}
@@ -35,8 +32,7 @@ function TreeGridItem(props: Props) {
       aria-level={props.level}
       aria-posinset={props.posinset}
       aria-setsize={props.setsize}
-      aria-expanded={isExpanded}
-      className={isHidden}
+      aria-expanded="false"
       onKeyDown={(e) => handleKeyDown(e)}
       onClick={(e) => clickHandler(e)}
     >
@@ -49,25 +45,19 @@ interface TreeGridState {
   rows: HTMLCollectionOf<HTMLTableRowElement>;
   expanded: (Boolean | null)[];
   hidden: Boolean[];
-  level: number[];
   focus: number | null;
 }
 
 function TreeGrid(props: Props) {
-  const { renders } = useContext(rootContext);
-  const levels = renders.map((render: any) => {
-    return render.level;
-  });
+  
   const rows = document.getElementsByTagName("tr");
   const currentState: TreeGridState = {
     rows: rows,
     expanded: [],
     hidden: [],
-    level: levels,
     focus: null,
   };
   const [state, setState] = useState(currentState);
-
   function getRowIndex() {
     const focused = getCurrentRow();
     const rows = Array.prototype.slice.call(state.rows);
@@ -123,6 +113,9 @@ function TreeGrid(props: Props) {
     currState.focus = focus;
     setState(currState);
   }
+  function getLevel(id : number){
+    return Number(state.rows[id].getAttribute("aria-level"));
+  }
 
   function handleKeyDown(event: KeyboardEvent) {
     var ENTER = 13;
@@ -162,10 +155,10 @@ function TreeGrid(props: Props) {
           if (state.expanded[id] !== true) {
             toggleHide();
           } else {
-            const currLevel = state.level[id];
+            const currLevel = getLevel(id);
 
             while (id - 1 >= 0) {
-              if (state.level[id - 1] > currLevel || state.hidden[id - 1]) {
+              if (getLevel(id-1) > currLevel || state.hidden[id - 1]) {
                 id--;
               } else {
                 state.rows[id - 1].focus();
@@ -202,7 +195,7 @@ function TreeGrid(props: Props) {
   function getParent(currentRow: number, startRow: number) {
     let i = currentRow;
     while (i >= startRow) {
-      if (state.level[i] < state.level[currentRow + 1]) {
+      if (getLevel(i) < getLevel(currentRow + 1)) {
         return i;
       }
       i--;
@@ -218,16 +211,17 @@ function TreeGrid(props: Props) {
 
     let k = rows.indexOf(focused);
     const rowIndex = k;
-    const currentLevel = state.level[k];
-    let nextLevel = k + 1 < rows.length ? state.level[k + 1] : -1;
+    const currentLevel = getLevel(k);
 
+    let nextLevel = k + 1 < rows.length ? getLevel(k+1) : -1;
     expanded[k] = expanded[k] === null ? null : !expanded[k];
-
+    state.rows[k].setAttribute("aria-expanded", String(expanded[k]));
     while (currentLevel < nextLevel) {
       let parent = getParent(k, rowIndex);
       hidden[k + 1] = expanded[parent] || hidden[parent];
+      state.rows[k+1].setAttribute("class", hidden[k+1] ? "hidden" : "");
       k++;
-      nextLevel = k + 1 < rows.length ? state.level[k + 1] : -1;
+      nextLevel = k + 1 < rows.length ? getLevel(k+1) : -1;
     }
 
     let currState = { ...state };
@@ -241,7 +235,9 @@ function TreeGrid(props: Props) {
       toggleHide();
     } else if (event.detail === 1) {
       updateFocus(getRowIndex());
-      if (getCurrentRow() !== null) getCurrentRow()?.focus();
+      getCurrentRow()?.focus();
+      console.log(getRowIndex());
+      console.log(state.hidden);
     }
   }
 
@@ -252,8 +248,6 @@ function TreeGrid(props: Props) {
           value={{
             handleKeyDown,
             clickHandler,
-            expanded: state.expanded,
-            hidden: state.hidden,
           }}
         >
           {props.children}
@@ -342,15 +336,13 @@ function Comp(props: Props) {
 }
 
 const renders: TreeGridItemRender[] = treeGrid(items);
-let val: TreeGridItemRender[] = [];
-const rootContext = createContext({ renders: val });
+
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement
 );
 root.render(
-  <rootContext.Provider value={{ renders }}>
     <TreeGrid>
-      {renders.map((render, index) => {
+      {renders.map((render) => {
         let cells = render.cells.map((cell) => {
           return <TreeGridCell>{cell}</TreeGridCell>;
         });
@@ -359,7 +351,6 @@ root.render(
             level={render.level}
             posinset={render.posinset}
             setsize={render.setsize}
-            id={index}
           >
             {cells}
           </TreeGridItem>
@@ -368,5 +359,5 @@ root.render(
       <Comp level={1} />
       <Comp level={2} />
     </TreeGrid>
-  </rootContext.Provider>
+
 );
